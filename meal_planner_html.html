@@ -232,87 +232,90 @@
             }, [meals, weeklyPlan]);
 
             // Handle file upload
-            const handleFileUpload = async (file) => {
-                if (!isFirebaseConfigured) {
-                    alert("Firebase not configured. Please add your Firebase configuration to enable image uploads.");
-                    return;
-                }
-
-                if (file && file.type.startsWith('image/')) {
-                    try {
-                        // Create unique filename
-                        const timestamp = Date.now();
-                        const randomId = Math.random().toString(36).substr(2, 9);
-                        const fileName = `${timestamp}_${randomId}_${file.name}`;
-                        
-                        const storageRef = firebase.storage().ref();
-                        const fileRef = storageRef.child(`meals/${fileName}`);
-
-                        // Show local preview while uploading
-                        const localPreview = URL.createObjectURL(file);
-                        setImagePreview(localPreview);
-
-                        // Upload to Firebase Storage
-                        const uploadTask = await fileRef.put(file);
-                        
-                        // Get the download URL
-                        const downloadURL = await fileRef.getDownloadURL();
-                        
-                        console.log("Upload successful, URL:", downloadURL); // Debug log
-
-                        // Update both states with the Firebase URL
-                        setNewMealImage(downloadURL);
-                        setImagePreview(downloadURL);
-
-                        // Clean up local preview
-                        URL.revokeObjectURL(localPreview);
-
-                    } catch (error) {
-                        console.error("Error uploading file:", error);
-                        alert("Image upload failed: " + error.message);
-                    }
-                } else {
-                    alert('Please select a valid image file.');
-                }
-            };
-
-            // 2. Fixed addMeal function 
-const addMeal = () => {
-    if (newMealName.trim() && newMealIngredients.trim()) {
-        const ingredientsList = newMealIngredients.split(',').map(ing => ing.trim());
-        
-        console.log("Current newMealImage state:", newMealImage);
-        console.log("Current uploadMethod:", uploadMethod);
-        console.log("Current imagePreview:", imagePreview);
-        
-        // For uploads, use imagePreview if newMealImage is empty
-        let imageUrl;
-        if (uploadMethod === 'upload') {
-            imageUrl = newMealImage || imagePreview || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
-        } else {
-            imageUrl = newMealImage.trim() || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
+            // Put this near the top of your component so cleanup works
+useEffect(() => {
+    return () => {
+        if (imagePreview && imagePreview.startsWith('blob:')) {
+            URL.revokeObjectURL(imagePreview);
         }
-        
-        console.log("Final image URL being used:", imageUrl);
-        
-        const newMeal = {
-            id: Date.now(),
-            name: newMealName.trim(),
-            ingredients: ingredientsList,
-            image: imageUrl
-        };
-        
-        setMeals([...meals, newMeal]);
-        
-        // Reset form
-        setNewMealName('');
-        setNewMealIngredients('');
-        setNewMealImage('');
-        setImagePreview('');
-        setUploadMethod('url');
-        setShowAddMeal(false);
+    };
+}, [imagePreview]);
+
+// Updated handleFileUpload
+const handleFileUpload = async (file) => {
+    if (!isFirebaseConfigured) {
+        alert("Firebase not configured. Please add your Firebase configuration to enable image uploads.");
+        return;
+    }
+
+    if (file && file.type.startsWith('image/')) {
+        try {
+            // Create unique filename
+            const timestamp = Date.now();
+            const randomId = Math.random().toString(36).substr(2, 9);
+            const fileName = `${timestamp}_${randomId}_${file.name}`;
+            
+            const storageRef = firebase.storage().ref();
+            const fileRef = storageRef.child(`meals/${fileName}`);
+
+            // Show local preview while uploading
+            const localPreview = URL.createObjectURL(file);
+            setImagePreview(localPreview);
+
+            // Upload to Firebase Storage
+            await fileRef.put(file);
+            
+            // Get the download URL
+            const downloadURL = await fileRef.getDownloadURL();
+            console.log("Upload successful, URL:", downloadURL);
+
+            // Swap preview and save permanent URL
+            setNewMealImage(downloadURL);
+            setImagePreview(downloadURL);
+
+            // Revoke old blob URL *after* React updates
+            setTimeout(() => {
+                if (localPreview.startsWith('blob:')) {
+                    URL.revokeObjectURL(localPreview);
+                }
+            }, 200);
+
+        } catch (error) {
+            console.error("Error uploading file:", error);
+            alert("Image upload failed: " + error.message);
+        }
+    } else {
+        alert('Please select a valid image file.');
     }
 };
+
+            // 2. Fixed addMeal function 
+            const addMeal = () => {
+                if (newMealName.trim() && newMealIngredients.trim()) {
+                    const ingredientsList = newMealIngredients.split(',').map(ing => ing.trim());
+                    
+                    // Use newMealImage for both upload and URL methods
+                    // newMealImage contains the Firebase Storage URL after successful upload
+                    const imageUrl = newMealImage.trim() || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
+                    
+                    const newMeal = {
+                        id: Date.now(),
+                        name: newMealName.trim(),
+                        ingredients: ingredientsList,
+                        image: imageUrl
+                    };
+                    
+                    setMeals([...meals, newMeal]);
+                    
+                    // Reset form
+                    setNewMealName('');
+                    setNewMealIngredients('');
+                    setNewMealImage('');
+                    setImagePreview('');
+                    setUploadMethod('url');
+                    setShowAddMeal(false);
+                }
+            };
 
             // Handle drag and drop
             const handleDragOver = (e) => {
@@ -725,17 +728,6 @@ const addMeal = () => {
                                             className: "bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full"
                                         }, `+${meal.ingredients.length - 4} more`)
                                     ),
-                                    
-                                    // React.createElement('div', { className: "flex gap-2" },
-                                    //     days.map(day =>
-                                    //         React.createElement('button', {
-                                    //             key: day,
-                                    //             onClick: () => assignMealToDay(day, meal),
-                                    //             className: "text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors",
-                                    //             title: `Add to ${day}`
-                                    //         }, day.slice(0, 3))
-                                    //     )
-                                    // )
                                 )
                             )
                         ),
