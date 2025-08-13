@@ -277,38 +277,33 @@
             };
 
             // 2. Fixed addMeal function 
-const addMeal = () => {
-    if (newMealName.trim() && newMealIngredients.trim()) {
-        const ingredientsList = newMealIngredients.split(',').map(ing => ing.trim());
-        
-        console.log("Current newMealImage state:", newMealImage);
-        console.log("Current uploadMethod:", uploadMethod);
-        console.log("Current imagePreview:", imagePreview);
-        
-        // Use newMealImage for both upload and URL methods
-        // newMealImage contains the Firebase Storage URL after upload
-        let imageUrl = newMealImage.trim() || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
-        
-        console.log("Final image URL being used:", imageUrl);
-        
-        const newMeal = {
-            id: Date.now(),
-            name: newMealName.trim(),
-            ingredients: ingredientsList,
-            image: imageUrl
-        };
-        
-        setMeals([...meals, newMeal]);
-        
-        // Reset form
-        setNewMealName('');
-        setNewMealIngredients('');
-        setNewMealImage('');
-        setImagePreview('');
-        setUploadMethod('url');
-        setShowAddMeal(false);
-    }
-};
+
+            const addMeal = () => {
+                if (newMealName.trim() && newMealIngredients.trim()) {
+                    const ingredientsList = newMealIngredients.split(',').map(ing => ing.trim());
+                    
+                    // Use newMealImage for both upload and URL methods
+                    // newMealImage contains the Firebase Storage URL after successful upload
+                    const imageUrl = newMealImage.trim() || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
+                    
+                    const newMeal = {
+                        id: Date.now(),
+                        name: newMealName.trim(),
+                        ingredients: ingredientsList,
+                        image: imageUrl
+                    };
+                    
+                    setMeals([...meals, newMeal]);
+                    
+                    // Reset form
+                    setNewMealName('');
+                    setNewMealIngredients('');
+                    setNewMealImage('');
+                    setImagePreview('');
+                    setUploadMethod('url');
+                    setShowAddMeal(false);
+                }
+            };
 
             // Handle drag and drop
             const handleDragOver = (e) => {
