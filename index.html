@@ -285,13 +285,9 @@ const addMeal = () => {
         console.log("Current uploadMethod:", uploadMethod);
         console.log("Current imagePreview:", imagePreview);
         
-        // For uploads, use imagePreview if newMealImage is empty
-        let imageUrl;
-        if (uploadMethod === 'upload') {
-            imageUrl = newMealImage || imagePreview || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
-        } else {
-            imageUrl = newMealImage.trim() || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
-        }
+        // Use newMealImage for both upload and URL methods
+        // newMealImage contains the Firebase Storage URL after upload
+        let imageUrl = newMealImage.trim() || "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=400&h=300&fit=crop&auto=format";
         
         console.log("Final image URL being used:", imageUrl);
         
