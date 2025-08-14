@@ -35,6 +35,15 @@
             border-radius: 8px;
             object-fit: cover;
         }
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
     </style>
 </head>
 <body>
@@ -75,7 +84,21 @@
         
         // Icon components
         const Plus = () => React.createElement('span', {}, '+');
-        const X = ({ size }) => React.createElement('span', { style: { fontSize: size ? `${size}px` : '14px' }}, '×');
+        const X = ({ size }) => React.createElement('span', { 
+            style: { 
+                fontSize: size ? `${size}px` : '14px',
+                width: size ? `${size + 6}px` : '20px',
+                height: size ? `${size + 6}px` : '20px',
+                borderRadius: '50%',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                color: '#ef4444',
+                fontWeight: 'bold',
+                lineHeight: '1'
+            }
+        }, '×');
         const Shuffle = ({ size }) => React.createElement('span', { style: { fontSize: size ? `${size}px` : '16px' }}, '🎲');
         const Upload = ({ size }) => React.createElement('span', { style: { fontSize: size ? `${size}px` : '16px' }}, '📁');
         
@@ -164,10 +187,26 @@
             const [uploadMethod, setUploadMethod] = useState('url'); // 'url' or 'upload'
             const [saving, setSaving] = useState(false);
             const [lastSaved, setLastSaved] = useState(null);
+            const [imageLoadingStates, setImageLoadingStates] = useState({});
             
             const fileInputRef = useRef(null);
 
             const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+            // Handle image loading states
+            const handleImageLoad = (imageKey) => {
+                setImageLoadingStates(prev => ({
+                    ...prev,
+                    [imageKey]: false
+                }));
+            };
+
+            const handleImageStart = (imageKey) => {
+                setImageLoadingStates(prev => ({
+                    ...prev,
+                    [imageKey]: true
+                }));
+            };
 
             // Load data from Firebase on component mount
             useEffect(() => {
@@ -232,64 +271,63 @@
             }, [meals, weeklyPlan]);
 
             // Handle file upload
-            // Put this near the top of your component so cleanup works
-useEffect(() => {
-    return () => {
-        if (imagePreview && imagePreview.startsWith('blob:')) {
-            URL.revokeObjectURL(imagePreview);
-        }
-    };
-}, [imagePreview]);
+            useEffect(() => {
+                return () => {
+                    if (imagePreview && imagePreview.startsWith('blob:')) {
+                        URL.revokeObjectURL(imagePreview);
+                    }
+                };
+            }, [imagePreview]);
 
-// Updated handleFileUpload
-const handleFileUpload = async (file) => {
-    if (!isFirebaseConfigured) {
-        alert("Firebase not configured. Please add your Firebase configuration to enable image uploads.");
-        return;
-    }
-
-    if (file && file.type.startsWith('image/')) {
-        try {
-            // Create unique filename
-            const timestamp = Date.now();
-            const randomId = Math.random().toString(36).substr(2, 9);
-            const fileName = `${timestamp}_${randomId}_${file.name}`;
-            
-            const storageRef = firebase.storage().ref();
-            const fileRef = storageRef.child(`meals/${fileName}`);
-
-            // Show local preview while uploading
-            const localPreview = URL.createObjectURL(file);
-            setImagePreview(localPreview);
-
-            // Upload to Firebase Storage
-            await fileRef.put(file);
-            
-            // Get the download URL
-            const downloadURL = await fileRef.getDownloadURL();
-            console.log("Upload successful, URL:", downloadURL);
-
-            // Swap preview and save permanent URL
-            setNewMealImage(downloadURL);
-            setImagePreview(downloadURL);
-
-            // Revoke old blob URL *after* React updates
-            setTimeout(() => {
-                if (localPreview.startsWith('blob:')) {
-                    URL.revokeObjectURL(localPreview);
+            // Updated handleFileUpload
+            const handleFileUpload = async (file) => {
+                if (!isFirebaseConfigured) {
+                    alert("Firebase not configured. Please add your Firebase configuration to enable image uploads.");
+                    return;
                 }
-            }, 200);
 
-        } catch (error) {
-            console.error("Error uploading file:", error);
-            alert("Image upload failed: " + error.message);
-        }
-    } else {
-        alert('Please select a valid image file.');
-    }
-};
+                if (file && file.type.startsWith('image/')) {
+                    try {
+                        // Create unique filename
+                        const timestamp = Date.now();
+                        const randomId = Math.random().toString(36).substr(2, 9);
+                        const fileName = `${timestamp}_${randomId}_${file.name}`;
+                        
+                        const storageRef = firebase.storage().ref();
+                        const fileRef = storageRef.child(`meals/${fileName}`);
 
-            // 2. Fixed addMeal function 
+                        // Show local preview while uploading
+                        const localPreview = URL.createObjectURL(file);
+                        setImagePreview(localPreview);
+
+                        // Upload to Firebase Storage
+                        await fileRef.put(file);
+                        
+                        // Get the download URL
+                        const downloadURL = await fileRef.getDownloadURL();
+                        console.log("Upload successful, URL:", downloadURL);
+
+                        // Swap preview and save permanent URL
+                        setNewMealImage(downloadURL);
+                        setImagePreview(downloadURL);
+
+                        // Revoke old blob URL *after* React updates
+                        setTimeout(() => {
+                            if (localPreview.startsWith('blob:')) {
+                                URL.revokeObjectURL(localPreview);
+                            }
+                        }, 200);
+
+                    } catch (error) {
+                        console.error("Error uploading file:", error);
+                        alert("Image upload failed: " + error.message);
+                    }
+                } else {
+                    alert('Please select a valid image file.');
+                }
+            };
+
+            // Fixed addMeal function 
             const addMeal = () => {
                 if (newMealName.trim() && newMealIngredients.trim()) {
                     const ingredientsList = newMealIngredients.split(',').map(ing => ing.trim());
@@ -437,7 +475,7 @@ const handleFileUpload = async (file) => {
 
             const weekDates = getCurrentWeekDates();
 
-            return React.createElement('div', { className: "min-h-screen bg-gray-50 p-4" },
+            return React.createElement('div', { className: "min-h-screen p-4", style: { background: "linear-gradient(120deg, rgba(220, 245, 220, 0.8), rgba(255, 235, 230, 0.8))" } },
                 React.createElement('div', { className: "max-w-6xl mx-auto" },
                     // Header
                     React.createElement('div', { className: "text-center mb-8" },
@@ -536,14 +574,29 @@ const handleFileUpload = async (file) => {
                                         React.createElement('div', { className: "bg-blue-50 border border-blue-200 rounded-lg p-3 relative group" },
                                             React.createElement('button', {
                                                 onClick: () => removeMealFromDay(day),
-                                                className: "absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            }, React.createElement(X, { size: 12 })),
-                                            weeklyPlan[day].image && React.createElement('img', {
-                                                src: weeklyPlan[day].image,
-                                                alt: weeklyPlan[day].name,
-                                                className: "w-full h-20 object-cover rounded mb-2",
-                                                onError: (e) => { e.target.style.display = 'none'; }
-                                            }),
+                                                className: "absolute -top-1 -right-1 p-4 group-hover:opacity-100 transition-opacity",
+                                                style: { margin: 0 }
+                                            }, 
+                                                React.createElement('div', {
+                                                    className: "bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100"
+                                                }, React.createElement(X, { size: 14 }))
+                                            ),
+                                            weeklyPlan[day].image && React.createElement('div', { className: "relative" },
+                                                imageLoadingStates[`plan-${day}`] && React.createElement('div', {
+                                                    className: "absolute inset-0 w-full h-20 skeleton rounded mb-2 z-10"
+                                                }),
+                                                React.createElement('img', {
+                                                    src: weeklyPlan[day].image,
+                                                    alt: weeklyPlan[day].name,
+                                                    className: "w-full h-20 object-contain rounded mb-2",
+                                                    onLoad: () => handleImageLoad(`plan-${day}`),
+                                                    onLoadStart: () => handleImageStart(`plan-${day}`),
+                                                    onError: (e) => { 
+                                                        e.target.style.display = 'none';
+                                                        handleImageLoad(`plan-${day}`);
+                                                    }
+                                                })
+                                            ),
                                             React.createElement('h4', { className: "font-medium text-sm text-gray-800 mb-1" }, weeklyPlan[day].name),
                                             React.createElement('p', { className: "text-xs text-gray-600" }, 
                                                 weeklyPlan[day].ingredients.slice(0, 3).join(', ') + 
@@ -706,15 +759,30 @@ const handleFileUpload = async (file) => {
                                 },
                                     React.createElement('button', {
                                         onClick: () => deleteMeal(meal.id),
-                                        className: "absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                    }, React.createElement(X, { size: 14 })),
+                                        className: "absolute -top-1 -right-1 p-4 group-hover:opacity-100 transition-opacity",
+                                        style: { margin: 0 }
+                                    }, 
+                                        React.createElement('div', {
+                                            className: "bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100"
+                                        }, React.createElement(X, { size: 14 }))
+                                    ),
                                     
-                                    meal.image && React.createElement('img', {
-                                        src: meal.image,
-                                        alt: meal.name,
-                                        className: "w-full h-32 object-cover rounded-lg mb-3",
-                                        onError: (e) => { e.target.style.display = 'none'; }
-                                    }),
+                                    meal.image && React.createElement('div', { className: "relative" },
+                                        imageLoadingStates[`meal-${meal.id}`] && React.createElement('div', {
+                                            className: "absolute inset-0 w-full h-32 skeleton rounded-lg mb-3 z-10"
+                                        }),
+                                        React.createElement('img', {
+                                            src: meal.image,
+                                            alt: meal.name,
+                                            className: "w-full h-32 object-contain rounded-lg mb-3",
+                                            onLoad: () => handleImageLoad(`meal-${meal.id}`),
+                                            onLoadStart: () => handleImageStart(`meal-${meal.id}`),
+                                            onError: (e) => { 
+                                                e.target.style.display = 'none';
+                                                handleImageLoad(`meal-${meal.id}`);
+                                            }
+                                        })
+                                    ),
                                     
                                     React.createElement('h3', { className: "font-semibold text-gray-800 mb-2 pr-8" }, meal.name),
                                     React.createElement('div', { className: "flex flex-wrap gap-1 mb-3" },
