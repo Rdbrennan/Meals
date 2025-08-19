@@ -1,14 +1,33 @@
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
 const MealPlannerApp = () => {
-    // Get components and hooks from global scope
-    const { Header, WeeklyPlan, AddMealForm, MealsGrid, ImageCropper } = window.Components;
+    // Get components and hooks from global scope - ADDED GroceryList here
+    const { Header, WeeklyPlan, AddMealForm, MealsGrid, ImageCropper, GroceryList } = window.Components;
     const { useFirebase, useImageUpload } = window.Hooks;
     const { Plus } = window.Icons;
     const { isFirebaseConfigured, firebase } = window.firebaseState;
 
     // State
-    const [meals, setMeals] = useState([]);
+    const [meals, setMeals] = useState([
+        {
+            id: 1,
+            name: "Spaghetti Carbonara",
+            ingredients: ["pasta", "eggs", "bacon", "parmesan", "black pepper"],
+            image: "https://images.unsplash.com/photo-1621996346565-e3dbc353d2e5?w=400&h=300&fit=crop&auto=format"
+        },
+        {
+            id: 2,
+            name: "Chicken Stir Fry",
+            ingredients: ["chicken breast", "mixed vegetables", "soy sauce", "garlic", "ginger", "rice"],
+            image: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&h=300&fit=crop&auto=format"
+        },
+        {
+            id: 3,
+            name: "Vegetable Curry",
+            ingredients: ["mixed vegetables", "coconut milk", "curry powder", "onion", "garlic", "rice"],
+            image: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=400&h=300&fit=crop&auto=format"
+        }
+    ]);
 
     const [weeklyPlan, setWeeklyPlan] = useState({
         Monday: null,
@@ -30,8 +49,20 @@ const MealPlannerApp = () => {
     
     const fileInputRef = useRef(null);
 
-    // Custom hooks
-    const { saving, lastSaved, saveToFirebase, loadFromFirebase, forceLoadFromFirebase } = useFirebase(meals, weeklyPlan, setMeals, setWeeklyPlan);
+    // Custom hooks - FIXED: Added initialLoadComplete to destructuring
+    const { 
+        saving, 
+        lastSaved, 
+        conflictDetected,
+        pendingChanges,
+        saveToFirebase, 
+        loadFromFirebase, 
+        forceLoadFromFirebase,
+        initialLoadComplete,
+        markPendingChanges,
+        createBackup
+    } = useFirebase(meals, weeklyPlan);
+    
     const {
         showCropper,
         tempImageForCrop,
@@ -50,8 +81,14 @@ const MealPlannerApp = () => {
     useEffect(() => {
         const loadData = async () => {
             const { meals: loadedMeals, weeklyPlan: loadedPlan } = await loadFromFirebase();
-            if (loadedMeals) setMeals(loadedMeals);
-            if (loadedPlan) setWeeklyPlan(loadedPlan);
+            if (loadedMeals) {
+                console.log("Loading meals from Firebase:", loadedMeals);
+                setMeals(loadedMeals);
+            }
+            if (loadedPlan) {
+                console.log("Loading weekly plan from Firebase:", loadedPlan);
+                setWeeklyPlan(loadedPlan);
+            }
         };
         loadData();
     }, []);
@@ -64,6 +101,35 @@ const MealPlannerApp = () => {
             }
         };
     }, [imagePreview]);
+
+    // Debounced save function to prevent excessive saves
+    const debouncedSave = useCallback(
+        debounce(async (mealsToSave, weeklyPlanToSave) => {
+            console.log("Debounced save triggered", { mealsToSave, weeklyPlanToSave });
+            await saveToFirebase(mealsToSave, weeklyPlanToSave, { silent: true });
+        }, 2000), // Increased debounce time to 2 seconds
+        [saveToFirebase]
+    );
+
+    // Track changes to mark pending changes - FIXED: Now initialLoadComplete is available
+    useEffect(() => {
+        if (initialLoadComplete) {
+            markPendingChanges();
+        }
+    }, [meals, weeklyPlan, markPendingChanges, initialLoadComplete]);
+
+    // Simple debounce function
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
 
     // Meal management functions
     const addMeal = async () => {
@@ -82,24 +148,16 @@ const MealPlannerApp = () => {
             const updatedMeals = [...meals, newMeal];
             setMeals(updatedMeals);
             
-            // Reset form first
+            // Auto-save after adding meal
+            debouncedSave(updatedMeals, weeklyPlan);
+            
+            // Reset form
             setNewMealName('');
             setNewMealIngredients('');
             setNewMealImage('');
             setImagePreview('');
             setUploadMethod('url');
             setShowAddMeal(false);
-            
-            // AUTO-SAVE ONLY when adding a new meal - pass the updated meals directly
-            if (isFirebaseConfigured) {
-                console.log("Auto-saving after adding new meal with", updatedMeals.length, "meals");
-                try {
-                    await saveToFirebase(updatedMeals, weeklyPlan);
-                    console.log("Successfully saved new meal to Firebase");
-                } catch (error) {
-                    console.error("Failed to save new meal to Firebase:", error);
-                }
-            }
         }
     };
 
@@ -130,34 +188,50 @@ const MealPlannerApp = () => {
         });
         setWeeklyPlan(updatedPlan);
 
-        // Save the updated data to Firebase
-        if (isFirebaseConfigured) {
-            console.log("Auto-saving after deleting meal with", updatedMeals.length, "meals remaining");
-            try {
-                await saveToFirebase(updatedMeals, updatedPlan);
-                console.log("Successfully saved meal deletion to Firebase");
-            } catch (error) {
-                console.error("Failed to save meal deletion to Firebase:", error);
-            }
-        }
+        // Auto-save after deletion
+        debouncedSave(updatedMeals, updatedPlan);
     };
 
-    // Weekly plan functions
-    const assignMealToDay = (day, meal) => {
-        setWeeklyPlan({
+    // Weekly plan functions with proper state management
+    const assignMealToDay = useCallback((day, meal) => {
+        console.log("Assigning meal to day:", { day, meal: meal.name });
+        
+        // Create a clean copy of the meal object to avoid any event contamination
+        const cleanMeal = {
+            id: meal.id,
+            name: meal.name,
+            ingredients: [...meal.ingredients],
+            image: meal.image
+        };
+        
+        const updatedPlan = {
             ...weeklyPlan,
-            [day]: meal
-        });
-    };
+            [day]: cleanMeal
+        };
+        
+        console.log("Updated plan:", updatedPlan);
+        setWeeklyPlan(updatedPlan);
+        
+        // Auto-save after assignment
+        debouncedSave(meals, updatedPlan);
+    }, [weeklyPlan, meals, debouncedSave]);
 
-    const removeMealFromDay = (day) => {
-        setWeeklyPlan({
+    const removeMealFromDay = useCallback((day) => {
+        console.log("Removing meal from day:", day);
+        
+        const updatedPlan = {
             ...weeklyPlan,
             [day]: null
-        });
-    };
+        };
+        
+        console.log("Updated plan after removal:", updatedPlan);
+        setWeeklyPlan(updatedPlan);
+        
+        // Auto-save after removal
+        debouncedSave(meals, updatedPlan);
+    }, [weeklyPlan, meals, debouncedSave]);
 
-    const randomizeMealPlan = () => {
+    const randomizeMealPlan = useCallback(() => {
         const { days } = window.Utils;
         const availableMeals = [...meals];
         const newPlan = {};
@@ -165,17 +239,29 @@ const MealPlannerApp = () => {
         days.forEach(day => {
             if (availableMeals.length > 0) {
                 const randomIndex = Math.floor(Math.random() * availableMeals.length);
-                newPlan[day] = availableMeals[randomIndex];
+                const selectedMeal = availableMeals[randomIndex];
+                
+                // Create clean copy
+                newPlan[day] = {
+                    id: selectedMeal.id,
+                    name: selectedMeal.name,
+                    ingredients: [...selectedMeal.ingredients],
+                    image: selectedMeal.image
+                };
             } else {
                 newPlan[day] = null;
             }
         });
         
+        console.log("Randomized plan:", newPlan);
         setWeeklyPlan(newPlan);
-    };
+        
+        // Auto-save after randomization
+        debouncedSave(meals, newPlan);
+    }, [meals, debouncedSave]);
 
-    const clearWeeklyPlan = () => {
-        setWeeklyPlan({
+    const clearWeeklyPlan = useCallback(() => {
+        const clearedPlan = {
             Monday: null,
             Tuesday: null,
             Wednesday: null,
@@ -183,8 +269,39 @@ const MealPlannerApp = () => {
             Friday: null,
             Saturday: null,
             Sunday: null
-        });
-    };
+        };
+        
+        console.log("Clearing weekly plan");
+        setWeeklyPlan(clearedPlan);
+        
+        // Auto-save after clearing
+        debouncedSave(meals, clearedPlan);
+    }, [meals, debouncedSave]);
+
+    // Manual save function
+    const handleManualSave = useCallback(async () => {
+        console.log("Manual save triggered");
+        const success = await saveToFirebase(meals, weeklyPlan, { silent: false });
+        if (success) {
+            alert("Data saved successfully!");
+        }
+    }, [meals, weeklyPlan, saveToFirebase]);
+
+    // Create backup function
+    const handleCreateBackup = useCallback(async () => {
+        await createBackup();
+    }, [createBackup]);
+
+    // Force reload function
+    const handleForceReload = useCallback(async () => {
+        const { meals: loadedMeals, weeklyPlan: loadedPlan } = await forceLoadFromFirebase();
+        if (loadedMeals) {
+            setMeals(loadedMeals);
+        }
+        if (loadedPlan) {
+            setWeeklyPlan(loadedPlan);
+        }
+    }, [forceLoadFromFirebase]);
 
     // Image handling for cropper
     const handleCropCompleteWithPreview = async (croppedBlob) => {
@@ -213,8 +330,11 @@ const MealPlannerApp = () => {
             React.createElement(Header, {
                 saving,
                 lastSaved,
-                onSave: saveToFirebase,
-                onForceLoad: forceLoadFromFirebase
+                conflictDetected,
+                pendingChanges,
+                onSave: handleManualSave,
+                onForceReload: handleForceReload,
+                onCreateBackup: handleCreateBackup
             }),
 
             // Weekly Plan Section
@@ -271,6 +391,12 @@ const MealPlannerApp = () => {
                     imageLoadingStates,
                     onImageLoad: handleImageLoad,
                     onImageStart: handleImageStart
+                }),
+
+                            // ADDED: Grocery List Section
+                React.createElement(GroceryList, {
+                    weeklyPlan,
+                    meals
                 })
             ),
 

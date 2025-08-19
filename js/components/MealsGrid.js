@@ -7,6 +7,41 @@ const MealsGrid = ({
 }) => {
     const { X } = window.Icons;
 
+    // Enhanced drag handlers
+    const handleDragStart = (e, meal) => {
+        e.dataTransfer.setData('application/json', JSON.stringify(meal));
+        e.dataTransfer.effectAllowed = 'copy';
+        
+        // Create a custom drag image for better visual feedback
+        const dragImage = e.currentTarget.cloneNode(true);
+        dragImage.style.transform = 'rotate(5deg)';
+        dragImage.style.opacity = '0.8';
+        dragImage.style.position = 'absolute';
+        dragImage.style.top = '-1000px';
+        dragImage.style.left = '-1000px';
+        dragImage.style.width = e.currentTarget.offsetWidth + 'px';
+        dragImage.style.height = e.currentTarget.offsetHeight + 'px';
+        document.body.appendChild(dragImage);
+        
+        e.dataTransfer.setDragImage(dragImage, e.currentTarget.offsetWidth / 2, e.currentTarget.offsetHeight / 2);
+        
+        // Clean up drag image after drag starts
+        setTimeout(() => {
+            if (dragImage.parentNode) {
+                document.body.removeChild(dragImage);
+            }
+        }, 0);
+
+        // Visual feedback on the original element
+        e.currentTarget.style.opacity = '0.5';
+        e.currentTarget.style.transform = 'scale(0.95)';
+    };
+
+    const handleDragEnd = (e) => {
+        e.currentTarget.style.opacity = '1';
+        e.currentTarget.style.transform = 'scale(1)';
+    };
+
     if (meals.length === 0) {
         return React.createElement('div', { className: "text-center py-12 text-gray-500" },
             React.createElement('p', {}, "No meals in your library yet."),
@@ -18,16 +53,10 @@ const MealsGrid = ({
         meals.map(meal =>
             React.createElement('div', {
                 key: meal.id,
-                className: "meal-card p-6 cursor-grab active:cursor-grabbing group relative",
+                className: "meal-card p-6 cursor-grab active:cursor-grabbing group relative transition-all duration-200 ease-in-out",
                 draggable: true,
-                onDragStart: (e) => {
-                    e.dataTransfer.setData('application/json', JSON.stringify(meal));
-                    e.dataTransfer.effectAllowed = 'copy';
-                    e.currentTarget.style.opacity = '0.5';
-                },
-                onDragEnd: (e) => {
-                    e.currentTarget.style.opacity = '1';
-                }
+                onDragStart: (e) => handleDragStart(e, meal),
+                onDragEnd: handleDragEnd
             },
                 React.createElement('button', {
                     onClick: () => onDeleteMeal(meal.id),

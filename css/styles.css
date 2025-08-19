@@ -69,6 +69,8 @@ body {
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
+    will-change: transform, opacity;
+    backface-visibility: hidden;
 }
 
 .meal-card:hover {
@@ -108,4 +110,14 @@ body {
 .ingredient-tag:hover {
     background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e0 100%);
     transform: translateY(-1px);
+}
+
+/* Ensure drop zones are always receptive */
+.border-dashed {
+    pointer-events: auto;
+}
+
+/* Smooth scrolling for better UX */
+html {
+    scroll-behavior: smooth;
 }

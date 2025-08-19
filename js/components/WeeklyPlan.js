@@ -12,6 +12,42 @@ const WeeklyPlan = ({
     const { days, getCurrentWeekDates, formatDate } = window.Utils;
     const weekDates = getCurrentWeekDates();
 
+    // Enhanced drag and drop handlers
+    const handleDragOver = (e, day) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+        e.currentTarget.classList.add('border-blue-500', 'bg-blue-50');
+    };
+
+    const handleDragLeave = (e, day) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Only remove styling if we're actually leaving the drop zone
+        // Check if the related target is not a child of the current target
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+        }
+    };
+
+    const handleDragEnter = (e, day) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    const handleDrop = (e, day) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+        
+        try {
+            const mealData = JSON.parse(e.dataTransfer.getData('application/json'));
+            onAssignMeal(day, mealData);
+        } catch (error) {
+            console.log('Error dropping meal:', error);
+        }
+    };
+
     return React.createElement('div', { className: "bg-white rounded-xl shadow-lg p-6 mb-8" },
         React.createElement('div', { className: "flex justify-between items-center mb-6" },
             React.createElement('h2', { className: "text-2xl font-semibold text-gray-800" }, "This Week's Plan"),
@@ -35,23 +71,10 @@ const WeeklyPlan = ({
                 React.createElement('div', { 
                     key: day, 
                     className: "border-2 border-dashed border-gray-300 rounded-lg p-4 min-h-32 hover:border-blue-400 transition-colors",
-                    onDragOver: (e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.add('border-blue-500', 'bg-blue-50');
-                    },
-                    onDragLeave: (e) => {
-                        e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
-                    },
-                    onDrop: (e) => {
-                        e.preventDefault();
-                        e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
-                        try {
-                            const mealData = JSON.parse(e.dataTransfer.getData('application/json'));
-                            onAssignMeal(day, mealData);
-                        } catch (error) {
-                            console.log('Error dropping meal:', error);
-                        }
-                    }
+                    onDragOver: (e) => handleDragOver(e, day),
+                    onDragEnter: (e) => handleDragEnter(e, day),
+                    onDragLeave: (e) => handleDragLeave(e, day),
+                    onDrop: (e) => handleDrop(e, day)
                 },
                     React.createElement('div', { className: "text-center mb-2" },
                         React.createElement('h3', { className: "font-semibold text-gray-700" }, day),
@@ -88,7 +111,7 @@ const WeeklyPlan = ({
                                 (weeklyPlan[day].ingredients.length > 2 ? '...' : '')
                             )
                         ) :
-                        React.createElement('p', { className: "text-gray-400 text-sm text-center" }, "Drop a meal here")
+                        React.createElement('p', { className: "text-gray-400 text-sm text-center pointer-events-none" }, "Drop a meal here")
                 )
             )
         )
